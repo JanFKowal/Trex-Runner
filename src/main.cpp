@@ -1,4 +1,7 @@
 #include <Arduino.h>
+#include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
+#include <Adafruit_GFX.h>
+#include "enums.h"
 
 #define BTNJUMP 34
 #define BTNSETTINGS 35
@@ -12,27 +15,8 @@
 #define TONESELECT 750
 #define TONEDIE 1000
 
-enum Flag {
-  JUMP_PRESSED,
-  SETTINGS_PRESSED,
-  NONE
-};
-
-enum GameState {
-  MENU,
-  PLAYING,
-  SETTINGS
-};
-
-enum SettingMenu {
-  DIFFICULTY
-};
-
-enum Difficulty {
-  EASY,
-  MEDIUM,
-  HARD
-};
+#define PANEL_RES_X 64
+#define PANEL_RES_Y 32
 
 const uint8_t multipliers[3] = {1, 2, 3};
 
