@@ -1,7 +1,7 @@
 #ifndef ENUMS_H
 #define ENUMS_H
 
-enum Flag {
+enum InputEvent {
   JUMP_PRESSED,
   SETTINGS_PRESSED,
   NONE

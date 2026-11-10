@@ -1,7 +1,9 @@
 #include <Arduino.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <Adafruit_GFX.h>
+#include <esp_timer.h>
 #include "enums.h"
+#include "bitmaps.h"
 
 #define BTNJUMP 34
 #define BTNSETTINGS 35
@@ -32,7 +34,7 @@
 
 MatrixPanel_I2S_DMA *dma_display = nullptr;
 
-volatile Flag currentFlag = NONE;
+volatile InputEvent pendingInputEvent = NONE;
 
 GameState currentGameState = MENU;
 
@@ -45,10 +47,23 @@ uint8_t currentSettingIndex = 0; // option index within the current setting menu
 
 uint8_t frameTimeMs = 10/currentMultiplier; 
 
-bool jumpPressed = false;
+uint8_t color_r = 255;
+uint8_t color_g = 255;
+uint8_t color_b = 255;
+uint16_t color = 0;
+
+constexpr uint64_t JUMP_DURATION_US = 500000;
+esp_timer_handle_t jumpTimer = nullptr;
+volatile bool jumpTimerExpired = false;
+bool isJumping = false;
+bool stepCount = true;
+uint32_t lastStepTimeMs = 0;
 
 void handleJump();
 void handleSettings();
+void onJumpTimer(void* arg);
+void drawTrex(bool jump = false);
+void updateFrame();
 
 void setup() {
   Serial.begin(115200);
@@ -78,17 +93,35 @@ void setup() {
     Serial.println("MatrixPanel_I2S_DMA initialization failed");
   }
   dma_display->clearScreen();
-  dma_display->setBrightness8(255); // Set brightness to maximum
-  dma_display->drawPixel(0, 0, dma_display->color565(255, 255, 255)); // Draw a white dot at top-left
+  dma_display->setBrightness8(200);
+  color = dma_display->color565(color_r, color_g, color_b);
+
+  esp_timer_create_args_t jumpTimerArgs = {};
+  jumpTimerArgs.callback = onJumpTimer;
+  jumpTimerArgs.arg = nullptr;
+  jumpTimerArgs.dispatch_method = ESP_TIMER_TASK;
+  jumpTimerArgs.name = "jump_timer";
+  esp_err_t timerResult = esp_timer_create(&jumpTimerArgs, &jumpTimer);
+  if (timerResult != ESP_OK) {
+    Serial.printf("Failed to create jump timer: %s\n", esp_err_to_name(timerResult));
+    jumpTimer = nullptr;
+  }
+
+  updateFrame();
 }
 
 void loop() {
+  if (jumpTimerExpired) {
+    jumpTimerExpired = false;
+    isJumping = false;
+  }
+
   noInterrupts();
-  Flag flag = currentFlag;
-  currentFlag = NONE;
+  InputEvent inputEvent = pendingInputEvent;
+  pendingInputEvent = NONE;
   interrupts();
 
-  switch (flag) {
+  switch (inputEvent) {
     case JUMP_PRESSED:
       switch (currentGameState) {
         case MENU: // start playing
@@ -98,9 +131,18 @@ void loop() {
           Serial.println("Start playing");
           break;
         case PLAYING: // jump
-          jumpPressed = true;
-          tone(SPEAKER, TONEJUMP, 100);
-          Serial.println("Jump pressed");
+          if (!isJumping) { // if not already jumping, start jump timer
+            isJumping = true;
+            jumpTimerExpired = false;
+            esp_err_t timerResult = esp_timer_start_once(jumpTimer, JUMP_DURATION_US);
+            if (timerResult != ESP_OK) {
+              Serial.printf("Failed to start jump timer: %s\n", esp_err_to_name(timerResult));
+              isJumping = false;
+            } else {
+              tone(SPEAKER, TONEJUMP, 100);
+              Serial.println("Jump pressed");
+            }
+          }
           break;
         case SETTINGS: // select setting and go back to menu
           currentGameState = MENU;
@@ -137,7 +179,8 @@ void loop() {
       }
       break;
 
-    case NONE: // update frame
+    case NONE:
+      updateFrame();
 
       break;
   }
@@ -146,9 +189,36 @@ void loop() {
 }
 
 void handleJump() {
-  currentFlag = JUMP_PRESSED;
+  pendingInputEvent = JUMP_PRESSED;
 }
 
 void handleSettings() {
-  currentFlag = SETTINGS_PRESSED;
+  pendingInputEvent = SETTINGS_PRESSED;
 }
+
+void onJumpTimer(void*) {
+  jumpTimerExpired = true;
+}
+
+void drawTrex(bool jump) {
+  if (jump) {
+    dma_display->drawBitmap(5, 5, trex10x10_jump, 10, 10, color);
+  } else {
+    if(stepCount) {
+      dma_display->drawBitmap(5, 15, trex10x10_left, 10, 10, color);
+    } else {
+      dma_display->drawBitmap(5, 15, trex10x10_right, 10, 10, color);
+    }
+  }
+}
+
+void updateFrame() {
+  dma_display->clearScreen();
+  uint32_t now = millis();
+  if (!isJumping && now - lastStepTimeMs >= 120 && currentGameState == PLAYING) {
+    stepCount = !stepCount;
+    lastStepTimeMs = now;
+  }
+  drawTrex(isJumping);
+}
+  
