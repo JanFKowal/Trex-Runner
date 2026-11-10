@@ -14,7 +14,7 @@ enum GameState {
 };
 
 enum SettingMenu {
-  DIFFICULTY
+  DIFFICULTY_MENU
 };
 
 enum Difficulty {
