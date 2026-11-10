@@ -38,3 +38,27 @@ const uint8_t PROGMEM trex10x10_jump[20] = {
   0b00010010, 0b00000000, //    █  █   
   0b00011011, 0b00000000  //    ██ ██  
 };
+
+const uint8_t PROGMEM obstacle5x5[5] = {
+  0b11111000, // █████
+  0b11111000, // █████
+  0b11111000, // █████
+  0b11111000, // █████
+  0b11111000  // █████
+};
+
+const uint8_t PROGMEM obstacle3x3[3] = {
+  0b11100000, // ███
+  0b11100000, // ███
+  0b11100000  // ███
+};
+
+const uint8_t PROGMEM obstacle2x2[2] = {
+  0b11000000, // ██
+  0b11000000  // ██
+};
+
+const uint8_t PROGMEM grass2x3[2] = {
+  0b01000000, //  █
+  0b10100000  // █ █
+};

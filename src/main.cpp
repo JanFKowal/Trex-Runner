@@ -45,7 +45,7 @@ uint8_t currentMultiplier = speedMultipliers[currentDifficulty];
 SettingMenu currentSettingMenu = DIFFICULTY_MENU; // TODO: doesnt change for now
 uint8_t currentSettingIndex = 0; // option index within the current setting menu
 
-uint8_t frameTimeMs = 10/currentMultiplier; 
+uint8_t frameTimeMs = 20/currentMultiplier; 
 
 uint8_t color_r = 255;
 uint8_t color_g = 255;
@@ -94,6 +94,7 @@ void setup() {
   }
   dma_display->clearScreen();
   dma_display->setBrightness8(200);
+  dma_display->setLatBlanking(2);
   color = dma_display->color565(color_r, color_g, color_b);
 
   esp_timer_create_args_t jumpTimerArgs = {};
@@ -203,22 +204,65 @@ void onJumpTimer(void*) {
 void drawTrex(bool jump) {
   if (jump) {
     dma_display->drawBitmap(5, 5, trex10x10_jump, 10, 10, color);
-  } else {
+  } else if (currentGameState == PLAYING) {
     if(stepCount) {
       dma_display->drawBitmap(5, 15, trex10x10_left, 10, 10, color);
     } else {
       dma_display->drawBitmap(5, 15, trex10x10_right, 10, 10, color);
     }
+  } else {
+    dma_display->drawBitmap(5, 15, trex10x10_jump, 10, 10, color);
   }
+}
+
+void drawGrass() {
+  static int grassOffset = 64;
+  
+  dma_display->drawBitmap(grassOffset, 28, grass2x3, 3, 2, color);
+
+  grassOffset--;
+  if (grassOffset <= -10) {//-10 to add time for grass to be off screen
+    grassOffset = 64;
+  }
+}
+
+void drawObstacles() {
+  static int obstacleOffset = random(64, 128); // Start with a random offset for the first obstacle
+  static uint8_t obstacleType = random(0, 3);
+  const uint8_t* const obstacleBitmaps[] = {obstacle3x3, obstacle5x5, obstacle2x2};
+  const uint8_t obstacleSizes[] = {3, 5, 2};
+  uint8_t obstacleSize = obstacleSizes[obstacleType];
+  
+  dma_display->drawBitmap(obstacleOffset, 25 - obstacleSize, obstacleBitmaps[obstacleType],
+                          obstacleSize, obstacleSize, color);
+
+  obstacleOffset--;
+  if (obstacleOffset <= -10) {//-10 to add time for grass to be off screen
+    obstacleOffset = random(64, 128); // Reset to a new random offset for the next obstacle
+    obstacleType = random(0, 3);
+  }
+
+
 }
 
 void updateFrame() {
   dma_display->clearScreen();
+  dma_display->drawFastHLine(0, 31, 64, color);
+  dma_display->drawFastHLine(0, 25, 64, color);
+
+
   uint32_t now = millis();
   if (!isJumping && now - lastStepTimeMs >= 120 && currentGameState == PLAYING) {
     stepCount = !stepCount;
     lastStepTimeMs = now;
   }
-  drawTrex(isJumping);
+  if(currentGameState == PLAYING) {
+    drawTrex(isJumping);
+    drawGrass();
+    drawObstacles();  
+  } else {
+    drawTrex(false);
+  }
+
 }
   
