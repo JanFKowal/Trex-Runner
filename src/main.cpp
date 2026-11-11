@@ -33,7 +33,7 @@
 
 #define PANEL_CHAIN_LENGTH 1
 #define PANEL_BRIGHTNESS 200
-#define FRAME_INTERVAL_MS 20
+#define FRAME_INTERVAL_MS 16
 #define JUMP_DURATION_US 500000
 #define RUN_ANIMATION_INTERVAL_MS 120
 #define TREX_X 5
@@ -43,17 +43,20 @@
 #define JUMP_TREX_Y 5
 #define OBSTACLE_GROUND_Y 25
 #define GRASS_Y 28
-#define OBSTACLE_COUNT 3 // total types of obstacles
-
-const uint8_t obstacleSizes[OBSTACLE_COUNT] = {2, 3, 5}; //contains the nxn size of each obstacle type
-
 struct ObstacleState {
   int16_t x;
-  uint8_t type;
+  const uint8_t* bitmap;
+  uint8_t size;
 };
 
-const uint8_t* const obstacleBitmaps[] = {
-    obstacle2x2, obstacle3x3, obstacle5x5};
+const ObstacleState obstacleOptions[] = {
+    {0, obstacle2x2, 2},
+    {0, obstacle3x3, 3},
+    {0, obstacle5x5, 5},
+    {0, obstacle7x7, 7}
+};
+
+#define OBSTACLE_COUNT (sizeof(obstacleOptions) / sizeof(obstacleOptions[0]))
 
 MatrixPanel_I2S_DMA* display = nullptr;
 esp_timer_handle_t jumpTimer = nullptr;
@@ -64,7 +67,11 @@ volatile bool jumpTimerExpired = false;
 GameState gameState = MENU;
 SettingMenu settingMenu = DIFFICULTY_MENU; //subset of menu screens when in SETTINGS state
 uint8_t settingIndex = 0;
-ObstacleState obstacle = {64, 0};
+const float speedMultipliers[] = {1, 1.5, 2};
+Difficulty currentDifficulty = HARD;
+uint8_t currentMultiplier = speedMultipliers[currentDifficulty];
+uint8_t frameTimeMs = (uint8_t) FRAME_INTERVAL_MS / currentMultiplier;
+ObstacleState obstacle = {64, obstacle2x2, 2};
 int16_t grassX = 64;
 uint8_t color_r = 255;
 uint8_t color_g = 255;
@@ -81,6 +88,7 @@ void initializeDisplay();
 void initializeJumpTimer();
 void onJumpTimer(void* arg);
 void updateGame();
+void resetObstacle();
 bool trexCollidesWithObstacle();
 void drawTrex();
 void playTone(uint16_t frequency);
@@ -105,8 +113,7 @@ void setup() {
   ledcSetup(0, 5000, 8);
   ledcAttachPin(SPEAKER, 0);
 
-  obstacle.x = random(RGB_PANEL_WIDTH, RGB_PANEL_WIDTH * 2);
-  obstacle.type = random(0, OBSTACLE_COUNT);
+  resetObstacle();
   initializeDisplay();
   delay(50); 
   initializeJumpTimer();
@@ -126,7 +133,7 @@ void loop() {
 
   handleInput(inputEvent);
   updateGame();
-  delay(FRAME_INTERVAL_MS);
+  delay(frameTimeMs);
 }
 
 void handleInput(InputEvent inputEvent) {
@@ -237,10 +244,8 @@ void updateGame() {
 
   if (gameState == PLAYING) {
     
-    const int16_t obstacleSize = obstacleSizes[obstacle.type];
-    if (--obstacle.x < -obstacleSize) {
-      obstacle.x = random(RGB_PANEL_WIDTH, RGB_PANEL_WIDTH * 2);
-      obstacle.type = random(0, OBSTACLE_COUNT);
+    if (--obstacle.x < -obstacle.size) {
+      resetObstacle();
     }
     if (--grassX < -3) {
       grassX = RGB_PANEL_WIDTH;
@@ -255,8 +260,7 @@ void updateGame() {
 
     if (trexCollidesWithObstacle()) {
       gameState = MENU;
-      obstacle.x = random(RGB_PANEL_WIDTH, RGB_PANEL_WIDTH * 2);
-      obstacle.type = random(0, OBSTACLE_COUNT);
+      resetObstacle();
       playTone(TONEDIE);
       Serial.println("Died");
     }
@@ -265,10 +269,9 @@ void updateGame() {
   drawTrex();
   if (gameState == PLAYING) {
     display->drawBitmap(grassX, GRASS_Y, grass2x3, 3, 2, displayColor);
-    const uint8_t obstacleSize = obstacleSizes[obstacle.type];
-    display->drawBitmap(obstacle.x, OBSTACLE_GROUND_Y - obstacleSize,
-                        obstacleBitmaps[obstacle.type], obstacleSize,
-                        obstacleSize, displayColor);
+    display->drawBitmap(obstacle.x, OBSTACLE_GROUND_Y - obstacle.size,
+                        obstacle.bitmap, obstacle.size,
+                        obstacle.size, displayColor);
   }
 }
 
@@ -276,10 +279,16 @@ bool trexCollidesWithObstacle() {
   const int16_t trexLeft = TREX_X;
   const int16_t trexRight = trexLeft + TREX_WIDTH;
 
-  const int16_t obstacleRight = obstacle.x + obstacleSizes[obstacle.type];
+  const int16_t obstacleRight = obstacle.x + obstacle.size;
   const int16_t obstacleLeft = obstacle.x;
 
   return !isJumping && !(trexRight < obstacleLeft || trexLeft > obstacleRight);
+}
+
+void resetObstacle() {
+  const size_t option = random(0, OBSTACLE_COUNT);
+  obstacle = obstacleOptions[option];
+  obstacle.x = random(RGB_PANEL_WIDTH, RGB_PANEL_WIDTH * 2);
 }
 
 void drawTrex() {
